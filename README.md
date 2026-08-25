@@ -97,3 +97,18 @@ Alarm Conditions:-
 
 
 
+
+## PLC Source Code (SCL)
+
+Toàn bộ chương trình điều khiển đã được viết lại bằng **SCL (IEC 61131-3)** trong thư mục [`PLC_Source/`](PLC_Source/README.md):
+
+- `DB_HydroPlant` — data block toàn bộ dữ liệu quy trình
+- `OB1_Main` — state machine (STOP / STARTING / RUNNING / STOPPING / TRIP)
+- `FC_AI_Process` — xử lý Analog Input
+- `FC_AO_Control` / `FC_DI_Control` — Analog/Digital Output kèm **Hand-Off-Auto**
+- `FC_Alarms` — 7 báo động + latched trip
+- `FC_PI_Baffle` — governor PI (tốc độ → baffle)
+
+**Hướng dẫn import vào TIA Portal (V18, CPU 1511F-1 PN):** xem [`PLC_Source/README.md`](PLC_Source/README.md)
+
+> **Lưu ý:** file `SimLogic_V18.ap18` ở gốc repo là file project TIA Portal **rỗng** (chỉ chứa tên project + version 18.0.1.0, không có thiết bị/chương trình). Hãy tạo project mới trong TIA Portal và import mã nguồn từ `PLC_Source/`, hoặc thay file này bằng project đầy đủ khi có.

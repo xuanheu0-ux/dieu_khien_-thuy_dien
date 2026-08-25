@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mô phỏng hệ điều khiển dầu thủy lực — Nhà máy thủy điện</title>
+<style>
+  :root{
+    --bg:#0d1420; --panel:#131c2b; --panel2:#0f1725; --line:#243349;
+    --txt:#dce6f5; --dim:#8fa2bd; --oil:#d9a441; --water:#3f8fd6;
+    --ok:#38c172; --warn:#f0b429; --err:#e5484d;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--txt); font-family:'Segoe UI',system-ui,Arial,sans-serif; font-size:14px;}
+  header{display:flex; align-items:center; gap:14px; padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line);}
+  header h1{font-size:16px; font-weight:600; flex:1;}
+  header h1 small{display:block; color:var(--dim); font-weight:400; font-size:11px;}
+  #stateBadge{padding:5px 14px; border-radius:20px; font-weight:700; font-size:13px; border:1px solid;}
+  select{background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:4px 8px;}
+  main{display:flex; gap:12px; padding:12px; align-items:flex-start;}
+  #canvasWrap{flex:1; min-width:0; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px;}
+  canvas{width:100%; height:auto; display:block; border-radius:6px;}
+  aside{width:352px; display:flex; flex-direction:column; gap:10px;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px;}
+  .card h3{font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin-bottom:8px;}
+  .gauge{margin-bottom:9px;}
+  .gauge .row{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:3px;}
+  .gauge .row span{color:var(--dim); font-size:12px;}
+  .gauge .row b{font-size:15px; font-variant-numeric:tabular-nums;}
+  .bar{height:10px; background:var(--panel2); border-radius:5px; position:relative; overflow:hidden; border:1px solid var(--line);}
+  .bar i{position:absolute; left:0; top:0; bottom:0; background:var(--oil); transition:width .1s linear;}
+  .bar em{position:absolute; top:-2px; bottom:-2px; width:2px; background:#ffffff55;}
+  .leds{display:grid; grid-template-columns:1fr 1fr; gap:6px 10px;}
+  .led{display:flex; align-items:center; gap:7px; font-size:12px; color:var(--dim);}
+  .led i{width:11px; height:11px; border-radius:50%; background:#2a3a52; border:1px solid #0008; flex:none;}
+  .led.on{color:var(--txt);}
+  .led.on i{background:var(--ok); box-shadow:0 0 7px var(--ok);}
+  .led.on.warn i{background:var(--warn); box-shadow:0 0 7px var(--warn);}
+  .led.on.err{background:none;}
+  .led.on.err i{background:var(--err); box-shadow:0 0 7px var(--err);}
+  .led.flash i{animation:blink .5s steps(2) infinite;}
+  @keyframes blink{50%{opacity:.25;}}
+  .ctl{display:flex; align-items:center; gap:8px; margin-bottom:9px; flex-wrap:wrap;}
+  .ctl label{color:var(--dim); font-size:12px; min-width:92px;}
+  .btn{background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:7px; padding:6px 12px; cursor:pointer; font-size:13px;}
+  .btn:hover:not(:disabled){border-color:#3d5578;}
+  .btn:disabled{opacity:.38; cursor:not-allowed;}
+  .btn.active{background:#1d3557; border-color:#3f6ea5; font-weight:600;}
+  .btn.start{background:#14532d; border-color:#2e7d4f;}
+  .btn.start:hover:not(:disabled){background:#1a6b3a;}
+  .btn.stop{background:#4c2f0e; border-color:#8a5a1d;}
+  .btn.estop{background:#5b1418; border-color:#a1272d; color:#ffd7d9; font-weight:800; font-size:15px; padding:9px 18px;}
+  .btn.estop:hover{background:#7c1d23;}
+  input[type=range]{flex:1; accent-color:#3f8fd6; min-width:100px;}
+  input[type=checkbox]{accent-color:#38c172; width:16px; height:16px;}
+  .chips{display:flex; flex-wrap:wrap; gap:6px;}
+  .chip{font-size:11.5px; padding:4px 9px; border-radius:14px; border:1px solid var(--line); color:var(--dim);}
+  .chip.on{background:#3d1518; border-color:#a1272d; color:#ffb3b6; font-weight:600;}
+  #log{height:150px; overflow-y:auto; font-size:11.5px; line-height:1.5; color:var(--dim); font-variant-numeric:tabular-nums;}
+  #log div b{color:var(--txt); font-weight:600;}
+  #log .err{color:#ff9a9e;}
+  #log .ok{color:#7edba8;}
+  details{font-size:12px; color:var(--dim);}
+  details summary{cursor:pointer; color:var(--txt); font-size:12px; text-transform:uppercase; letter-spacing:.08em;}
+  details p, details li{margin-top:6px; line-height:1.55;}
+  details ul{padding-left:18px;}
+  a{color:#7ab8ff;}
+  @media (max-width:1000px){ main{flex-direction:column;} aside{width:100%;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mô phỏng hệ thống điều khiển dầu thủy lực — Nhà máy thủy điện
+    <small>Tank dầu áp lực · Máy nén khí · Van补气 · Van điện từ dừng khẩn cấp · Bơm dầu ốc vít · Van an toàn · Servomotor + Van phân phối chính · Relay dầu (feed rod) · Step motor · Bánh tay</small>
+  </h1>
+  <select id="speedSel" title="Tốc độ mô phỏng">
+    <option value="1">1×</option>
+    <option value="2">2×</option>
+    <option value="4">4×</option>
+  </select>
+  <span id="stateBadge">DỪNG</span>
+</header>
+
+<main>
+  <div id="canvasWrap"><canvas id="cv" width="960" height="620"></canvas></div>
+
+  <aside>
+    <div class="card">
+      <h3>Chỉ báo</h3>
+      <div class="gauge">
+        <div class="row"><span>Áp lực dầu động tác</span><b id="gP">—</b></div>
+        <div class="bar"><i id="bP"></i><em style="left:50%"></em><em style="left:83.3%"></em><em style="left:91.6%;background:#e5484d"></em></div>
+      </div>
+      <div class="gauge">
+        <div class="row"><span>Áp suất khí bể (túi khí)</span><b id="gPt">—</b></div>
+        <div class="bar"><i id="bPt" style="background:#7ab8ff"></i><em style="left:50%"></em><em style="left:83.3%"></em></div>
+      </div>
+      <div class="gauge">
+        <div class="row"><span>Tốc độ roto</span><b id="gN">—</b></div>
+        <div class="bar"><i id="bN" style="background:#38c172"></i><em style="left:73.3%"></em><em style="left:88.8%;background:#e5484d"></em></div>
+      </div>
+      <div class="gauge" style="margin-bottom:0">
+        <div class="row"><span>Vị trí cửa van dẫn (baffle)</span><b id="gX">—</b></div>
+        <div class="bar"><i id="bX" style="background:#3f8fd6"></i></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Trạng thái thiết bị</h3>
+      <div class="leds">
+        <div class="led" id="ledPump"><i></i>Bơm dầu (screw)</div>
+        <div class="led" id="ledComp"><i></i>Máy nén khí</div>
+        <div class="led" id="ledAer"><i></i>Van补气 (aeration)</div>
+        <div class="led" id="ledSafe"><i></i>Van an toàn</div>
+        <div class="led" id="ledSolen"><i></i>Van điện từ khẩn cấp</div>
+        <div class="led" id="ledGen"><i></i>Máy phát chạy</div>
+        <div class="led" id="ledStall"><i></i>Relay kẹt (áp thấp)</div>
+        <div class="led" id="ledAlarm"><i></i>ĐÈN BÁO ĐỘNG</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Điều khiển</h3>
+      <div class="ctl">
+        <label>Chế độ baffle</label>
+        <button class="btn" id="btnAuto">AUTO (governor)</button>
+        <button class="btn" id="btnHand">HAND (bánh tay)</button>
+      </div>
+      <div class="ctl">
+        <label>Tốc độ đặt</label>
+        <input type="range" id="spSlider" min="200" max="400" step="5" value="300">
+        <b id="spVal" style="width:52px; text-align:right">300 rpm</b>
+      </div>
+      <div class="ctl">
+        <label>Bánh tay (HAND)</label>
+        <input type="range" id="handSlider" min="0" max="100" step="1" value="40">
+        <b id="handVal" style="width:52px; text-align:right">40 %</b>
+      </div>
+      <div class="ctl">
+        <label>Bơm dầu</label>
+        <button class="btn" id="btnPumpAuto">Tự động</button>
+        <button class="btn" id="btnPumpMan">Thủ công</button>
+        <button class="btn" id="btnPumpOn" disabled>Bật</button>
+      </div>
+      <div class="ctl">
+        <label>Interlock lưới</label>
+        <input type="checkbox" id="gridChk" checked>
+        <span style="color:var(--dim); font-size:11.5px">Power station interlock</span>
+      </div>
+      <div class="ctl" style="margin-top:12px">
+        <button class="btn start" id="btnStart">▶ KHỞI ĐỘNG</button>
+        <button class="btn stop" id="btnStop" disabled>■ DỪNG</button>
+        <button class="btn" id="btnReset" disabled>RESET TRIP</button>
+      </div>
+      <div class="ctl" style="margin:0">
+        <button class="btn estop" id="btnEstop">⏻ E-STOP KHẨN CẤP</button>
+        <button class="btn" id="btnAlmReset">RESET BÁO ĐỘNG</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Báo động</h3>
+      <div class="chips">
+        <span class="chip" id="almLowP">Áp dầu thấp</span>
+        <span class="chip" id="almHighP">Áp dầu cao</span>
+        <span class="chip" id="almOver">Quá tốc</span>
+        <span class="chip" id="almGrid">Mất lưới</span>
+        <span class="chip" id="almStall">Relay kẹt</span>
+        <span class="chip" id="almEstop">E-STOP</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3> Nhật ký sự kiện</h3>
+      <div id="log"></div>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>Về mô phỏng</summary>
+        <p>Mô phỏng các thiết bị trên bản vẽ gốc (tiếng Trung/Anh): bể dầu áp lực + máy nén khí &amp; van补气, van điện từ dừng khẩn cấp, bơm dầu ốc vít + van an toàn, servomotor + van phân phối chính (chính phân phối valve), relay dầu với feed rod dẫn động cửa van dẫn, step motor và bánh tay.</p>
+        <ul>
+          <li><b>Tự động (AUTO):</b> governor PI điều chỉnh baffle giữ tốc độ theo setpoint — như block <code>FC_PI_Baffle</code> trong <code>PLC_Source</code>.</li>
+          <li><b>Thủ công (HAND):</b> bánh tay đặt vị trí baffle trực tiếp (Hand-Off-Auto).</li>
+          <li><b>E-STOP:</b> van điện từ xả dầu khẩn cấp → relay đóng nhanh cửa van → máy ngừng an toàn.</li>
+          <li><b>Mất lưới</b> (bỏ tick interlock) khi đang chạy → roto tăng tốc → quá tốc → TRIP.</li>
+          <li>Áp dầu &lt; 0,25 MPa → relay không đủ lực (kẹt); &lt; 0,22 MPa khi đang chạy → TRIP. Áp khí bể &lt; 0,35 MPa → máy nén tự cấp khí (van补气).</li>
+        </ul>
+        <p>Mã PLC tương ứng (TIA Portal SCL): <code>../PLC_Source</code>. Chu kỳ mô phỏng 100 ms.</p>
+      </details>
+    </div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+// ================================================================
+// MÔ HÌNH VẬT LÝ
+// ================================================================
+const P_MIN=0.05, P_MAX=0.60, P_LO=0.30, P_STALL=0.25,
+      P_HI=0.50, P_SAFE=0.55,
+      PUMP_RATE=0.055, PUMP_RAMP=1.5,
+      PUMP_AUTO_TOPUP=0.36, PUMP_AUTO_OFF=0.45,
+      TANK_LO=0.35, TANK_HI=0.50, AER_RATE=0.035, TANK_CPL=0.05,
+      ESTOP_DUMP=1.1,
+      GATE_TAU=4.0, GATE_RATE=0.125, ESTOP_CLOSE=0.5, OIL_COST=0.03,
+      N_SLOPE=750, N_TAU=6.0,
+      P_TRIP_LOW=0.22,
+      PI_KP=0.0020, PI_KI=0.0002,
+      SP_NOM=300, OVER_SPEED=330,
+      COOL_TIME=8;
+
+const S={
+  t:0, state:0,               // 0 STOP 1 STARTING 2 RUNNING 3 STOPPING 4 TRIP
+  grid:true,
+  P:0.40, Pt:0.45,
+  pump:false, pumpAuto:true, pumpMan:false, pumpRamp:0, pumpRunT:0,
+  estop:false,
+  mode:'AUTO',
+  sp:SP_NOM,
+  hand:0.40,
+  c:0, x:0,
+  n:0, I:0,
+  integ:0,
+  tripLowT:0,
+  alarm:{lowP:false,highP:false,over:false,grid:false,stall:false,estop:false},
+  at:{lowP:0,highP:0,over:0,grid:0,stall:0},
+  // hình ảnh
+  impA:0, stepA:0, handA:0, turbA:0, dashOil:0, dashWater:0,
+  safeLift:0,
+  speed:1,
+};
+let prevGrid=true, prevState=0, prevPump=false, prevSafe=false, prevAer=false, prevSolen=false;
+
+const STATE_NAME=["DỪNG","KHỞI ĐỘNG","ĐANG CHẠY","DỪNG MÁY","TRIP"];
+const STATE_COL=["#8fa2bd","#f0b429","#38c172","#f0b429","#e5484d"];
+
+function clamp(v,a,b){return v<a?a:(v>b?b:v);}
+
+// ---------------- Nhật ký ----------------
+const logEl=document.getElementById('log');
+function log(msg,cls){
+  const d=document.createElement('div');
+  if(cls)d.className=cls;
+  const t=S.t, mm=String(Math.floor(t/60)).padStart(2,'0'), ss=String(Math.floor(t%60)).padStart(2,'0');
+  d.innerHTML='<b>t+'+mm+':'+ss+'</b> — '+msg;
+  logEl.prepend(d);
+  while(logEl.children.length>70)logEl.lastChild.remove();
+}
+
+// ---------------- Bật/tắt thiết bị ----------------
+function setEstop(on){
+  if(on===S.estop)return;
+  S.estop=on;
+  S.alarm.estop=on;
+  if(on){
+    S.state=4;
+    S.pump=false; S.pumpMan=false;
+    log('⏻ E-STOP: van điện từ mở — xả dầu khẩn cấp, đóng nhanh cửa van!','err');
+  } else {
+    log('E-STOP đã được RESET','ok');
+  }
+}
+
+function startPlant(){
+  if(S.state!==0||S.estop)return;
+  for(const k in S.alarm) if(S.alarm[k]){ log('Không thể khởi động: còn báo động chưa reset','err'); return; }
+  S.state=1; S.integ=0;
+  log('▶ Lệnh KHỞI ĐỘNG: bơm dầu cấp áp lực...','ok');
+}
+function stopPlant(){
+  if(S.state!==2)return;
+  S.state=3;
+  log('■ Lệnh DỪNG: đóng cửa van về 0...');
+}
+function resetTrip(){
+  if(S.state!==4)return;
+  if(S.estop){
+    if(!(S.P<0.12 && S.x<0.05 && S.n<20)){ log('Chưa đủ điều kiện RESET (cần xả dầu, cửa van đóng, roto dừng)','err'); return; }
+    setEstop(false);
+  } else {
+    if(!(S.n<10 && S.x<0.05)){ log('Chưa đủ điều kiện RESET (roto chưa dừng hẳn)','err'); return; }
+  }
+  S.state=0; S.integ=0;
+  clearSatisfiedAlarms();
+  log('✔ RESET TRIP hoàn tất — về trạng thái DỪNG','ok');
+}
+function clearSatisfiedAlarms(){
+  const cond={
+    lowP: S.P<P_LO && !S.estop && S.state!==4,
+    highP: S.P>P_HI,
+    over: S.n>OVER_SPEED,
+    grid: !S.grid && S.state===2,
+    stall: false,
+    estop: S.estop,
+  };
+  for(const k in S.alarm){
+    if(S.alarm[k] && !cond[k]){ S.alarm[k]=false; S.at[k]=0; log('Báo động "'+k+'" đã xóa'); }
+  }
+}
+
+// ---------------- TÍCH PHÂN MỘT BƯỚC ----------------
+function tick(dt){
+  S.t+=dt;
+  const st=S.state;
+
+  // ---------- Lệnh pilot valve (c = vị trí baffle mong muốn 0..1) ----------
+  let c=0;
+  if(S.estop){ c=0; }
+  else if(S.mode==='HAND'){ c=(st===4)?0:S.hand; }
+  else {
+    if(st===1||st===2){
+      const err=S.sp-S.n;
+      const u=clamp(S.integ,-0.2,1.2);
+      if(!((u>=1.199&&err>0)||(u<=-0.199&&err<0))) S.integ=clamp(S.integ+PI_KI*err*dt,-0.2,1.2);
+      c=clamp(PI_KP*err+S.integ,0,1);
+    } else if(st===3){ c=0; }
+    else { c=0; }
+  }
+  S.c=c;
+
+  // ---------- Động học relay dầu → cửa van ----------
+  let dx=0;
+  if(S.estop){
+    dx=-Math.min(ESTOP_CLOSE*dt,S.x);
+  } else if(S.P<P_STALL){
+    dx=0; // không đủ áp lực dầu → relay kẹt
+  } else {
+    dx=clamp((c-S.x)/GATE_TAU,-GATE_RATE*dt,GATE_RATE*dt);
+    S.x=clamp(S.x+dx,0,1);
+  }
+  if(S.estop) S.x=clamp(S.x+dx,0,1);
+
+  // ---------- Áp lực dầu động tác ----------
+  let dP=0;
+  // bơm
+  if(S.estop) S.pump=false;
+  else if(!S.pumpAuto) S.pump=S.pumpMan;
+  else {
+    // bơm điều áp: bật/tắt theo dải áp lực (differential)
+    let onT, offT;
+    if(S.state===0){ onT=0.36; offT=0.48; }
+    else if(S.state===1||S.state===2){ onT=0.45; offT=0.48; }
+    else if(S.state===3){ onT=(S.n>10)?0.45:0.36; offT=0.48; }
+    else { onT=-1; offT=0; }   // TRIP: bơm tắt
+    if(S.state!==4){
+      if(S.pump) S.pump = S.P < offT;
+      else       S.pump = S.P < onT;
+    } else S.pump=false;
+  }
+  S.pumpRunT = S.pump ? S.pumpRunT+dt : 0;
+  S.pumpRamp = S.pump ? Math.min(1,S.pumpRamp+dt/PUMP_RAMP) : 0;
+  dP += PUMP_RATE*S.pumpRamp*dt;
+
+  // bể dầu bù áp (túi khí đẩy dầu)
+  if(S.Pt>S.P+0.02){
+    const f=TANK_CPL*(S.Pt-S.P)*dt;
+    S.P+=f; S.Pt-=f*0.6;
+  }
+  // relay lấy/trả dầu
+  dP -= OIL_COST*Math.abs(dx);
+  if(dx<0) dP += -OIL_COST*dx*0.5;
+  // hao phí sẵn sàng của hệ thống (mất áp tự nhiên)
+  dP -= 0.004*dt;
+
+  // van an toàn
+  if(S.P>P_SAFE) dP -= (S.P-P_SAFE)*8.0*dt;
+
+  // van điện từ xả khẩn cấp
+  if(S.estop) dP -= ESTOP_DUMP*dt;
+
+  S.P=clamp(S.P+dP,P_MIN,P_MAX);
+  S.safeOpen=S.P>P_SAFE;
+
+  // ---------- Túi khí + máy nén + van补气 ----------
+  S.aerOpen=S.Pt<TANK_LO && !S.estop;
+  if(S.aerOpen) S.Pt+=AER_RATE*dt;
+  S.Pt=clamp(S.Pt,0.08,TANK_HI);
+
+  // ---------- Roto máy phát ----------
+  if(S.grid) S.n += (N_SLOPE*S.x - S.n)/N_TAU*dt;
+  else       S.n += (N_SLOPE*S.x - 0.15*S.n)/N_TAU*dt;
+  S.n=clamp(S.n,0,600);
+  S.I = S.n>40 ? clamp(S.x*280*S.n/SP_NOM,0,220) : 0;
+
+  // ---------- TRIP ----------
+  if(!S.estop){
+    if(st===2 && S.P<P_TRIP_LOW){ S.tripLowT+=dt; if(S.tripLowT>=2) S.tripLowT=2; }
+    else S.tripLowT=0;
+  }
+  let tripped=false, tripMsg='';
+  if(S.n>OVER_SPEED && !S.estop){ tripped=true; tripMsg='QUÁ TỐC roto ('+S.n.toFixed(0)+' rpm > '+OVER_SPEED+')'; }
+  else if(S.tripLowT>=2){ tripped=true; tripMsg='ÁP DẦU THẤP khi đang chạy'; }
+  if(tripped && S.state!==4){
+    S.state=4;
+    S.alarm.over = S.n>OVER_SPEED ? true : S.alarm.over;
+    S.alarm.lowP = S.P<P_LO ? true : S.alarm.lowP;
+    log('⚠ TRIP: '+tripMsg+' — đóng nhanh cửa van','err');
+  }
+
+  // ---------- Chuyển trạng thái ----------
+  if(S.state===1 && S.n>=0.95*S.sp){
+    if(S.grid){ S.state=2; log('✔ Đạt tốc độ định mức — ĐÓNG contactor chính (vào lưới)','ok'); }
+  }
+  if(S.state===3){
+    if(S.n<10){ S.state=0; log('✔ Roto dừng hẳn — bơm dầu tắt, về DỪNG','ok'); }
+  }
+
+  // ---------- Báo động (debounce) ----------
+  function deb(key,cond,limit){
+    S.at[key]=cond?S.at[key]+dt:0;
+    if(S.at[key]>=limit && !S.alarm[key]){
+      S.alarm[key]=true;
+      log('🔔 Báo động: '+key.toUpperCase(),'err');
+    }
+  }
+  if(!S.estop && S.state!==4) deb('lowP', S.P<P_LO, 2);
+  deb('highP', S.P>P_HI, 2);
+  if(!S.estop) deb('over', S.n>OVER_SPEED, 0.5);
+  deb('grid', !S.grid && S.state===2, 0.5);
+  deb('stall', (S.state>=1&&S.state<=3) && Math.abs(c-S.x)>0.03 && S.P<P_STALL, 3);
+  if(S.estop && !S.alarm.estop){ S.alarm.estop=true; }
+
+  // ---------- Cập nhật góc hình ảnh ----------
+  S.impA += S.pumpRamp*9*dt;
+  S.stepA = S.x*5*2*Math.PI;
+  S.turbA += S.n/60*2*Math.PI*dt*0.25;
+  S.dashOil = S.pumpRamp>0.05 ? S.dashOil-22*dt : (S.estop? S.dashOil-60*dt : S.dashOil);
+  S.dashWater = S.dashWater-30*S.x*dt;
+  S.safeLift += ((S.safeOpen?1:0)-S.safeLift)*Math.min(1,6*dt);
+}
+
+// ---------------- MẶT NẠ ----------------
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+function pipe(x1,y1,x2,y2,col,w){
+  ctx.strokeStyle=col; ctx.lineWidth=w; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+}
+function label(x,y,t,sub,align){
+  ctx.textAlign=align||'left'; ctx.textBaseline='alphabetic';
+  ctx.fillStyle='#c9d6ea'; ctx.font='11px Segoe UI, sans-serif';
+  ctx.fillText(t,x,y);
+  if(sub){ ctx.fillStyle='#7488a6'; ctx.font='9px Segoe UI, sans-serif'; ctx.fillText(sub,x,y+11); }
+}
+function valveBowtie(cx,cy,open,active){
+  ctx.save(); ctx.translate(cx,cy);
+  ctx.fillStyle= active? (Math.sin(S.t*14)>0? '#e5484d':'#7a2023') : (open? '#3f8fd6':'#5a6c88');
+  ctx.strokeStyle='#0d1420';
+  ctx.beginPath(); ctx.moveTo(-9,-7); ctx.lineTo(9,0); ctx.lineTo(-9,7); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(9,-7); ctx.lineTo(-9,0); ctx.lineTo(9,7); ctx.closePath(); ctx.fill(); ctx.stroke();
+  if(open){ ctx.strokeStyle='#9fd0ff'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(-9,-7); ctx.lineTo(9,7); ctx.moveTo(9,-7); ctx.lineTo(-9,7); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function draw(){
+  ctx.clearRect(0,0,960,620);
+  // nền lưới
+  ctx.strokeStyle='#182338'; ctx.lineWidth=1;
+  for(let gx=0;gx<960;gx+=30){ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,620);ctx.stroke();}
+  for(let gy=0;gy<620;gy+=30){ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(960,gy);ctx.stroke();}
+
+  const OIL='#b98a2e', OIL_HI='#d9a441', WATER='#2e6ca8', WATER_HI='#3f8fd6';
+
+  // ===== BỂ DẦU ÁP LỰC =====
+  // máy nén khí
+  ctx.fillStyle='#1a2536'; ctx.strokeStyle='#3a4c68'; ctx.lineWidth=1.5;
+  ctx.fillRect(24,26,100,46); ctx.strokeRect(24,26,100,46);
+  // động cơ máy nén
+  ctx.beginPath(); ctx.arc(48,49,11,0,7); ctx.fillStyle='#22304a'; ctx.fill(); ctx.stroke();
+  if(S.aerOpen){ ctx.save(); ctx.translate(48,49); ctx.rotate(S.t*6);
+    ctx.strokeStyle='#7ab8ff'; ctx.lineWidth=2;
+    for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(9*Math.cos(i*2.09),9*Math.sin(i*2.09));ctx.stroke();}
+    ctx.restore(); }
+  label(24,88,'Máy nén khí','气泵 Comp. pressed');
+  // ống khí + van补气
+  pipe(124,49,150,49,'#41546f',5); pipe(150,49,150,118,'#41546f',5);
+  valveBowtie(150,84,S.aerOpen,false);
+  label(158,80,'Van补气','Aeration valve');
+
+  // bể dầu
+  const tx=96,ty=118,tw=120,th=212;
+  ctx.beginPath();
+  ctx.moveTo(tx,ty+56); ctx.arc(tx+tw/2,ty+56,56,Math.PI,0);
+  ctx.lineTo(tx+tw,ty+th-16); ctx.arcTo(tx+tw,ty+th,tx+tw-16,ty+th,16);
+  ctx.lineTo(tx+16,ty+th); ctx.arcTo(tx,ty+th,tx,ty+th-16,16);
+  ctx.closePath();
+  ctx.fillStyle='#141d2c'; ctx.fill(); ctx.strokeStyle='#4a5e80'; ctx.lineWidth=2; ctx.stroke();
+  // dầu trong bể
+  ctx.save(); ctx.clip();
+  const oilTop=214;
+  ctx.fillStyle='#8a6a1d'; ctx.fillRect(tx,oilTop,tw,ty+th-oilTop);
+  ctx.fillStyle='#a37d24';
+  ctx.fillRect(tx,oilTop,tw,3);
+  ctx.restore();
+  label(tx+18,ty+th-24,'Bể dầu áp lực','压力油罐 (túi khí)');
+  // đồng hồ áp lực dầu
+  const gcx=252,gcy=150,gr=27;
+  pipe(216,150,gcx-gr,gcy,OIL,4);
+  ctx.beginPath(); ctx.arc(gcx,gcy,gr,0,7); ctx.fillStyle='#0f1725'; ctx.fill(); ctx.strokeStyle='#4a5e80'; ctx.stroke();
+  for(let i=0;i<=6;i++){
+    const a=-Math.PI*0.75 + i*(Math.PI*1.5/6);
+    ctx.beginPath(); ctx.moveTo(gcx+Math.cos(a)*(gr-5),gcy+Math.sin(a)*(gr-5));
+    ctx.lineTo(gcx+Math.cos(a)*(gr-9),gcy+Math.sin(a)*(gr-9));
+    ctx.strokeStyle= i>=5? '#e5484d':'#8fa2bd'; ctx.lineWidth=2; ctx.stroke();
+  }
+  const na=-Math.PI*0.75 + clamp(S.P/P_MAX,0,1)*Math.PI*1.5;
+  ctx.beginPath(); ctx.moveTo(gcx,gcy); ctx.lineTo(gcx+Math.cos(na)*(gr-7),gcy+Math.sin(na)*(gr-7));
+  ctx.strokeStyle='#ff6b6e'; ctx.lineWidth=2.5; ctx.stroke();
+  label(gcx,gcy+gr+14,'Áp lực dầu (MPa)','0 – 0.6',gcx&&'center');
+  ctx.textAlign='left';
+
+  // ===== VAN ĐIỆN TỪ KHẨN CẤP (xuất bể) =====
+  pipe(156,ty+th,156,390,OIL,6);
+  valveBowtie(156,356,S.estop,S.estop);
+  ctx.strokeStyle=S.estop?'#e5484d':'#5a6c88'; ctx.lineWidth=1.5;
+  ctx.strokeRect(170,349,24,15);
+  ctx.fillStyle=S.estop?'#ff9a9e':'#7488a6'; ctx.font='9px Segoe UI'; ctx.textAlign='center';
+  ctx.fillText(S.estop?'XẢ DẦU':'COIL',182,359); ctx.textAlign='left';
+  label(200,382,'Van điện từ dừng khẩn cấp','紧急停机电磁阀');
+
+  // ===== HEADER DẦU =====
+  pipe(156,390,848,390,OIL,7);
+  ctx.setLineDash([10,8]); ctx.lineDashOffset=S.dashOil;
+  pipe(156,390,848,390,OIL_HI,2.5);
+  ctx.setLineDash([]);
+
+  // ===== BƠM DẦU ỐC VÍT + VAN AN TOÀN =====
+  // hút
+  pipe(120,ty+th,120,470,OIL,6);
+  // thân bơm
+  ctx.fillStyle='#1a2536'; ctx.strokeStyle='#3a4c68'; ctx.lineWidth=1.5;
+  ctx.fillRect(48,470,112,74); ctx.strokeRect(48,470,112,74);
+  ctx.beginPath(); ctx.arc(88,507,22,0,7); ctx.fillStyle='#22304a'; ctx.fill(); ctx.stroke();
+  if(S.pumpRamp>0.02){ ctx.save(); ctx.translate(88,507); ctx.rotate(S.impA);
+    ctx.strokeStyle='#d9a441'; ctx.lineWidth=3;
+    for(let i=0;i<4;i++){ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(17*Math.cos(i*1.57),17*Math.sin(i*1.57));ctx.stroke();}
+    ctx.restore(); }
+  // động cơ bơm
+  ctx.beginPath(); ctx.arc(168,507,14,0,7); ctx.fillStyle='#22304a'; ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#8fa2bd'; ctx.font='10px Segoe UI'; ctx.textAlign='center'; ctx.fillText('M',168,511); ctx.textAlign='left';
+  // đẩy + van an toàn
+  pipe(160,500,238,500,OIL,6); pipe(238,500,238,390,OIL,6);
+  const lift=S.safeLift*8;
+  ctx.strokeStyle=S.safeLift>0.5?'#e5484d':'#5a6c88'; ctx.lineWidth=2;
+  ctx.beginPath(); // lò xo
+  for(let i=0;i<4;i++){ ctx.moveTo(230,470-i*6-lift*0.5); ctx.lineTo(246,467-i*6-lift*0.5); }
+  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(230,472-lift); ctx.lineTo(246,472-lift); ctx.lineWidth=3; ctx.stroke();
+  label(254,470,'Van an toàn','安全阀');
+  label(48,558,'Bơm dầu ốc vít','螺杆泵 Screw rod pump');
+
+  // ===== SERVOMOTOR + VAN PHÂN PHỐI CHÍNH =====
+  // van chính trên header
+  ctx.fillStyle='#22304a'; ctx.strokeStyle='#4a5e80'; ctx.lineWidth=1.5;
+  ctx.fillRect(430,368,90,44); ctx.strokeRect(430,368,90,44);
+  label(436,362,'Van phân phối chính','主配压阀 Main distributing valve');
+  // pilot cylinder
+  ctx.fillRect(462,258,26,100); ctx.strokeRect(462,258,26,100);
+  const pPist=266+S.c*84;
+  ctx.beginPath(); ctx.moveTo(462,pPist); ctx.lineTo(488,pPist); ctx.strokeStyle='#d9a441'; ctx.lineWidth=3; ctx.stroke();
+  // servomotor
+  ctx.fillRect(386,272,44,118); ctx.strokeRect(386,272,44,118);
+  const sPist=280+S.x*102;
+  ctx.beginPath(); ctx.moveTo(386,sPist); ctx.lineTo(430,sPist); ctx.strokeStyle='#d9a441'; ctx.lineWidth=3; ctx.stroke();
+  label(382,262,'Servomotor','调速器 Servomotor');
+  pipe(398,272,398,258,'#5a6c88',3); pipe(412,258,462,258,'#5a6c88',3);
+  // step motor
+  ctx.beginPath(); ctx.arc(520,246,16,0,7); ctx.fillStyle='#22304a'; ctx.fill(); ctx.stroke();
+  ctx.save(); ctx.translate(520,246); ctx.rotate(S.stepA);
+  ctx.strokeStyle='#7ab8ff'; ctx.lineWidth=2;
+  for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(12*Math.cos(i*2.09),12*Math.sin(i*2.09));ctx.stroke();}
+  ctx.restore();
+  pipe(520,262,520,300,'#5a6c88',3); pipe(520,300,475,300,'#5a6c88',3); pipe(475,300,475,258,'#5a6c88',3);
+  label(540,242,'Step motor','多圈电机 (feedback)');
+
+  // ===== RELAY DẦU + BÃNH TAY + FEED ROD =====
+  // xylanh relay
+  ctx.fillStyle='#141d2c'; ctx.strokeStyle='#4a5e80'; ctx.lineWidth=2;
+  ctx.fillRect(700,362,150,56); ctx.strokeRect(700,362,150,56);
+  const pX=712+126*S.x;
+  ctx.fillStyle='#d9a441'; ctx.fillRect(702,364,Math.max(0,pX-702),52); // buồng dầu trái
+  ctx.fillStyle='#8a6a1d'; ctx.fillRect(702,364,Math.max(0,pX-702),52);
+  ctx.fillStyle='#e8e2d0'; ctx.fillRect(pX,364,8,52);
+  // bánh tay
+  ctx.save(); ctx.translate(775,326); ctx.rotate(S.handA);
+  ctx.strokeStyle='#8fa2bd'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(0,0,18,0,7); ctx.stroke();
+  for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(-18*Math.cos(i*2.09),-18*Math.sin(i*2.09));ctx.lineTo(18*Math.cos(i*2.09),18*Math.sin(i*2.09));ctx.stroke();}
+  ctx.restore();
+  pipe(775,344,775,362,'#5a6c88',3);
+  label(775,296,'Bánh tay (hand-wheel)','手轮', 'center');
+  ctx.textAlign='left';
+  // feed rod
+  pipe(pX+8,390,874,390,'#c8cfd9',5);
+  label(700,432,'Relay dầu — feed rod','接力器 Feed rod');
+
+  // ===== KÊNH NƯỚC + CỬA VAN DẪN + TUABIN =====
+  const dL=884,dR=940,dTop=252,dBot=418;
+  // nước trong kênh
+  ctx.fillStyle='rgba(46,108,168,.45)';
+  ctx.fillRect(dL,dTop,dR-dL,dBot-dTop);
+  pipe(dL,dTop,dL,dBot,WATER,4); pipe(dR,dTop,dR,dBot,WATER,4);
+  // cửa van (plate ngang, nâng lên = mở)
+  const plateY=300+S.x*96;
+  ctx.fillStyle='#e8e2d0'; ctx.fillRect(dL-4,plateY-4,dR-dL+8,7);
+  // liên kết feed rod → plate
+  ctx.strokeStyle='#c8cfd9'; ctx.lineWidth=4;
+  ctx.beginPath(); ctx.moveTo(874,390); ctx.lineTo(dR+6,plateY); ctx.stroke();
+  // dòng nước qua khe
+  if(S.x>0.02){
+    ctx.setLineDash([8,7]); ctx.lineDashOffset=S.dashWater;
+    ctx.strokeStyle=WATER_HI; ctx.lineWidth=3;
+    const gapY=plateY+8;
+    if(dBot-gapY>14){
+      ctx.beginPath(); ctx.moveTo(dL+12,gapY); ctx.lineTo(dL+12,dBot); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(dR-12,gapY); ctx.lineTo(dR-12,dBot); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+  // tuabin
+  ctx.beginPath(); ctx.arc(912,462,34,0,7); ctx.fillStyle='#141d2c'; ctx.fill(); ctx.strokeStyle='#4a5e80'; ctx.lineWidth=2; ctx.stroke();
+  ctx.save(); ctx.translate(912,462); ctx.rotate(S.turbA);
+  ctx.strokeStyle='#7ab8ff'; ctx.lineWidth=2.5;
+  for(let i=0;i<6;i++){ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(28*Math.cos(i*1.047),28*Math.sin(i*1.047));ctx.stroke();}
+  ctx.restore();
+  pipe(912,496,912,540,'#5a6c88',3);
+  label(912,560,'Tuabin + máy phát','水轮机 · Generator','', 'center');
+  ctx.textAlign='left';
+  label(dL-4,244,'Kênh vào','来水管','right');
+
+  // ===== LƯỚI (interlock) =====
+  ctx.fillStyle='#1a2536'; ctx.strokeStyle=S.grid?'#2e7d4f':'#a1272d'; ctx.lineWidth=1.5;
+  ctx.fillRect(700,28,120,52); ctx.strokeRect(700,28,120,52);
+  ctx.beginPath(); ctx.arc(720,54,8,0,7);
+  ctx.fillStyle=S.grid?'#38c172':'#e5484d'; ctx.fill();
+  label(736,49,'Interlock lưới','电网闭锁 Power interlock');
+  ctx.fillStyle=S.grid?'#7edba8':'#ff9a9e'; ctx.font='10px Segoe UI';
+  ctx.fillText(S.grid?'CHO PHÉP VÀO LƯỚI':'MẤT LƯỚI — CẮT TẢI',736,68);
+
+  // ===== Ô TRẠNG THÁI + TỐC DÒNG =====
+  ctx.fillStyle='rgba(13,20,32,.85)'; ctx.fillRect(12,560,300,48);
+  ctx.strokeStyle='#243349'; ctx.strokeRect(12,560,300,48);
+  ctx.fillStyle=STATE_COL[S.state]; ctx.font='bold 15px Segoe UI';
+  ctx.fillText('TRẠNG THÁI: '+STATE_NAME[S.state],24,581);
+  ctx.fillStyle='#8fa2bd'; ctx.font='11px Segoe UI';
+  ctx.fillText('Dầu '+S.P.toFixed(2)+' MPa · Bể '+S.Pt.toFixed(2)+' · N='+S.n.toFixed(0)+' rpm · I='+S.I.toFixed(0)+' A',24,599);
+}
+
+// ---------------- GẦN NÚT ----------------
+const $=id=>document.getElementById(id);
+$('btnStart').onclick=startPlant;
+$('btnStop').onclick=stopPlant;
+$('btnReset').onclick=resetTrip;
+$('btnEstop').onclick=()=>setEstop(true);
+$('btnAlmReset').onclick=()=>{ clearSatisfiedAlarms(); log('Đã reset các báo động còn điều kiện'); };
+$('btnAuto').onclick=()=>{S.mode='AUTO';};
+$('btnHand').onclick=()=>{S.mode='HAND'; log('Chuyển chế độ HAND (bánh tay)');};
+$('btnPumpAuto').onclick=()=>{S.pumpAuto=true; S.pumpMan=false;};
+$('btnPumpMan').onclick=()=>{S.pumpAuto=false;};
+$('btnPumpOn').onclick=function(){S.pumpMan=!S.pumpMan; this.disabled=false;};
+$('spSlider').oninput=function(){S.sp=+this.value; $('spVal').textContent=S.sp+' rpm';};
+$('handSlider').oninput=function(){S.hand=+this.value/100; $('handVal').textContent=this.value+' %';};
+$('gridChk').onchange=function(){S.grid=this.checked;};
+$('speedSel').onchange=function(){S.speed=+this.value;};
+
+function refreshUI(){
+  $('gP').textContent=S.P.toFixed(2)+' MPa';
+  $('gP').style.color= S.P<P_LO?'#ff9a9e':(S.P>P_HI?'#f0b429':'#dce6f5');
+  $('bP').style.width=(S.P/P_MAX*100)+'%';
+  $('bP').style.background= S.P<P_LO?'#e5484d':(S.P>P_HI?'#f0b429':'#d9a441');
+  $('gPt').textContent=S.Pt.toFixed(2)+' MPa';
+  $('bPt').style.width=(S.Pt/0.6*100)+'%';
+  $('gN').textContent=S.n.toFixed(0)+' rpm';
+  $('bN').style.width=clamp(S.n/450*100,0,100)+'%';
+  $('bN').style.background= S.n>OVER_SPEED?'#e5484d':'#38c172';
+  $('gX').textContent=(S.x*100).toFixed(1)+' %';
+  $('bX').style.width=(S.x*100)+'%';
+
+  function led(id,on,cls,flash){
+    const e=$(id);
+    e.className='led'+(on?' on':'')+(cls?' '+cls:'')+(flash?' flash':'');
+  }
+  led('ledPump',S.pump,'');
+  led('ledComp',S.aerOpen,'');
+  led('ledAer',S.aerOpen,'warn');
+  led('ledSafe',S.safeOpen,'err');
+  led('ledSolen',S.estop,'err',true);
+  led('ledGen',S.I>5,'');
+  led('ledStall',S.alarm.stall,'warn',true);
+  const anyAlarm=Object.values(S.alarm).some(v=>v);
+  led('ledAlarm',anyAlarm,'err',anyAlarm);
+
+  $('almLowP').className='chip'+(S.alarm.lowP?' on':'');
+  $('almHighP').className='chip'+(S.alarm.highP?' on':'');
+  $('almOver').className='chip'+(S.alarm.over?' on':'');
+  $('almGrid').className='chip'+(S.alarm.grid?' on':'');
+  $('almStall').className='chip'+(S.alarm.stall?' on':'');
+  $('almEstop').className='chip'+(S.alarm.estop?' on':'');
+
+  const b=$('stateBadge');
+  b.textContent=STATE_NAME[S.state];
+  b.style.color=STATE_COL[S.state]; b.style.borderColor=STATE_COL[S.state]; b.style.background='#0d1420';
+
+  $('btnStart').disabled = !(S.state===0 && !S.estop && !Object.values(S.alarm).some(v=>v));
+  $('btnStop').disabled  = S.state!==2;
+  const canReset = S.state===4 && (S.estop ? (S.P<0.12&&S.x<0.05&&S.n<20) : (S.n<10&&S.x<0.05));
+  $('btnReset').disabled = !canReset;
+
+  $('btnAuto').className='btn'+(S.mode==='AUTO'?' active':'');
+  $('btnHand').className='btn'+(S.mode==='HAND'?' active':'');
+  $('btnPumpAuto').className='btn'+(S.pumpAuto?' active':'');
+  $('btnPumpMan').className='btn'+(!S.pumpAuto?' active':'');
+  $('btnPumpOn').disabled=S.pumpAuto;
+  $('btnPumpOn').textContent=S.pumpMan?'Tắt':'Bật';
+  $('spSlider').disabled=S.mode!=='AUTO';
+  $('handSlider').disabled=S.mode!=='HAND';
+}
+
+// ---------------- VÒNG LẶP ----------------
+let last=performance.now(), acc=0;
+const DT=0.02;
+function frame(now){
+  let real=(now-last)/1000; last=now;
+  if(real>0.1)real=0.1;
+  acc+=real*S.speed;
+  let steps=0;
+  while(acc>=DT && steps<64){ tick(DT); acc-=DT; steps++; }
+  // log cạnh
+  if(S.state!==prevState){ prevState=S.state; }
+  if(S.pump!==prevPump){ log(S.pump?(S.pumpAuto?'Bơm dầu BẬT (AUTO)':'Bơm dầu BẬT (THỦ CÔNG)'):'Bơm dầu TẮT'); prevPump=S.pump; }
+  if(S.safeOpen!==prevSafe){ if(S.safeOpen) log('⚠ Van an toàn MỞ — xả áp dầu','err'); prevSafe=S.safeOpen; }
+  if(S.aerOpen!==prevAer){ if(S.aerOpen) log('Van补气 mở — máy nén khí cấp khí vào bể'); prevAer=S.aerOpen; }
+  if(S.grid!==prevGrid){ log(S.grid?'Interlock lưới ĐÓNG lại':'⚠ Interlock lưới MỞ — cắt tải máy phát','err'); prevGrid=S.grid; }
+  // bánh tay quay theo lệnh
+  const handTarget=S.mode==='HAND'?S.hand*4*2*Math.PI:0;
+  if(S.mode==='HAND') S.handA=(S.handA+ (S.hand*4*2*Math.PI - S.handA)*0.08);
+  draw(); refreshUI();
+  requestAnimationFrame(frame);
+}
+log('Mô phỏng sẵn sàng. Nhấn ▶ KHỞI ĐỘNG để chạy trình tự khởi động.');
+log('Gợi ý: thử E-STOP, hoặc bỏ tick "Interlock lưới" khi đang chạy để thấy TRIP quá tốc.');
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

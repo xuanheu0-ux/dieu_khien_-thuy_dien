@@ -112,3 +112,17 @@ Toàn bộ chương trình điều khiển đã được viết lại bằng **S
 **Hướng dẫn import vào TIA Portal (V18, CPU 1511F-1 PN):** xem [`PLC_Source/README.md`](PLC_Source/README.md)
 
 > **Lưu ý:** file `SimLogic_V18.ap18` ở gốc repo là file project TIA Portal **rỗng** (chỉ chứa tên project + version 18.0.1.0, không có thiết bị/chương trình). Hãy tạo project mới trong TIA Portal và import mã nguồn từ `PLC_Source/`, hoặc thay file này bằng project đầy đủ khi có.
+
+## Mô phỏng tương tác (web)
+
+Mô phỏng tương tác hệ thống điều khiển dầu thủy lực của turbine — dựng lại các thiết bị trên bản vẽ gốc (bể dầu áp lực + máy nén khí + van补气, van điện từ dừng khẩn cấp, bơm dầu ốc vít + van an toàn, servomotor + van phân phối chính, relay dầu với feed rod dẫn động cửa van, step motor, bánh tay):
+
+👉 **`simulator/index.html`** — chạy bằng `cd simulator && python3 -m http.server 8000` rồi mở `http://localhost:8000` (hoặc mở trực tiếp file `index.html` trong trình duyệt).
+
+Tính năng mô phỏng:
+- **Tự động (AUTO):** governor PI giữ tốc độ roto theo setpoint (khớp `FC_PI_Baffle` trong `PLC_Source`), trình tự khởi động / dừng an toàn.
+- **Thủ công (HAND):** bánh tay đặt vị trí cửa van trực tiếp (Hand-Off-Auto).
+- **E-STOP:** van điện từ xả dầu khẩn cấp → relay đóng nhanh cửa van → máy ngừng an toàn.
+- **Mất lưới** (bỏ tick interlock) khi đang chạy → quá tốc → TRIP.
+- **Bơm hỏng / áp dầu thấp** → relay kẹt, báo động; áp khí bể thấp → máy nén tự cấp khí.
+- Van an toàn, step motor, động cơ bơm — tất cả hoạt động và chỉ báo trực quan.

@@ -113,16 +113,25 @@ Toàn bộ chương trình điều khiển đã được viết lại bằng **S
 
 > **Lưu ý:** file `SimLogic_V18.ap18` ở gốc repo là file project TIA Portal **rỗng** (chỉ chứa tên project + version 18.0.1.0, không có thiết bị/chương trình). Hãy tạo project mới trong TIA Portal và import mã nguồn từ `PLC_Source/`, hoặc thay file này bằng project đầy đủ khi có.
 
-## Mô phỏng tương tác (web)
 
-Mô phỏng tương tác hệ thống điều khiển dầu thủy lực của turbine — dựng lại các thiết bị trên bản vẽ gốc (bể dầu áp lực + máy nén khí + van补气, van điện từ dừng khẩn cấp, bơm dầu ốc vít + van an toàn, servomotor + van phân phối chính, relay dầu với feed rod dẫn động cửa van, step motor, bánh tay):
+## Mô phỏng tương tác (web) — Thiết bị điều tốc SWT-28
 
-👉 **`simulator/index.html`** — chạy bằng `cd simulator && python3 -m http.server 8000` rồi mở `http://localhost:8000` (hoặc mở trực tiếp file `index.html` trong trình duyệt).
+Mô phỏng tương tác **điều tốc thủy điện kiểu vi xử lý SWT-28 (DW1-28)** — dựng lại đúng 2 bản vẽ (sơ đồ hệ thống dầu 21 chi tiết + sơ đồ điện PLC/HMI):
 
-Tính năng mô phỏng:
-- **Tự động (AUTO):** governor PI giữ tốc độ roto theo setpoint (khớp `FC_PI_Baffle` trong `PLC_Source`), trình tự khởi động / dừng an toàn.
-- **Thủ công (HAND):** bánh tay đặt vị trí cửa van trực tiếp (Hand-Off-Auto).
-- **E-STOP:** van điện từ xả dầu khẩn cấp → relay đóng nhanh cửa van → máy ngừng an toàn.
-- **Mất lưới** (bỏ tick interlock) khi đang chạy → quá tốc → TRIP.
-- **Bơm hỏng / áp dầu thấp** → relay kẹt, báo động; áp khí bể thấp → máy nén tự cấp khí.
-- Van an toàn, step motor, động cơ bơm — tất cả hoạt động và chỉ báo trực quan.
+👉 **`simulator/index.html`** — chạy bằng `cd simulator && python3 -m http.server 8000` rồi mở `http://localhost:8000` (hoặc mở trực tiếp file `index.html`).
+
+**Phần thủy lực (bản vẽ 1 — 21 chi tiết đánh số):**
+- (1) Microprocessor actuator — governor PI (REMOTE) điều khiển piston van phân phối (15) qua van kéo (6)
+- (2)(3) Nút bấm + step motor — chỉnh cửa van thủ công (LOCAL), (4) cảm biến di chuyển, (5) công tắc cuối hành trình
+- (10) Solenoid valve for stopping — E-STOP/TRIP: xả dầu khẩn cấp, servomotor đóng nhanh cửa van
+- (14)(15) Van phân phối + piston (pilot 3 vị trí), (11) lọc dầu, (16)(13) servomotor + piston
+- (17)–(21) Trục hồi, cánh tay hồi, lò xo hồi, kè nghiêng hồi — cơ cấu hồi vị lò xo: cửa van chạy → lò xo nén, ép pilot về tâm
+- Nguồn dầu: bể áp lực + máy nén khí + van补气, bơm ốc vít + van an toàn
+
+**Phần điện (bản vẽ 2):**
+- HMI WEINTEK MT8071IP (RS422) ↔ PLC FX1U-16MT/ES ↔ STEP MOTOR DRIVER (RS485)
+- GEN_VT + BUS_VT → modul tín hiệu tương tự (UG-U, UG-V, UB-U, UB-V)
+- Bảo vệ máy phát + CB (5A); lệnh **BUILD UP**, **DE-EXCITATION**, **INCREASE/DECREASE**, **FOR CLOSED (4s)**, **LOCAL/REMOTE**, **ALARM RESET**
+- Đèn FIELD FLASHING: BUILD UP, BUILD UP FAILURE, RUNNING, STOPPING, TRIP, FOR CLOSED, LOCAL/REMOTE
+
+**Kịch bản thử:** ⚡ BUILD UP (khởi động + kích từ + đóng CB) · ⏻ E-STOP · bỏ tick BUS khi chạy → quá tốc TRIP · giữ ▲ INCREASE (LOCAL) → quá dòng TRIP · FOR CLOSED (4s) · bơm thủ công → van an toàn.

@@ -191,6 +191,7 @@ Vì đây là nhà máy mô phỏng, HMI/simulator cần đóng vai "thế giớ
    - `DI_GenBrake` có thể "kẹt TRUE" một thời đoạn để diễn tập alarm `ALM_BrakeFail`.
 3. Ghi các giá trị vào tag `AI_*Raw` / `DI_*` của PLC.
 
-## 7. Mô phỏng tương tác (web)
 
-Có mô phỏng web tương tác của hệ thống dầu thủy lực (thiết bị trên bản vẽ gốc: bể dầu áp lực, máy nén khí, van补气, van điện từ dừng khẩn cấp, bơm ốc vít, van an toàn, servomotor, van phân phối chính, relay dầu + feed rod, step motor, bánh tay) ở thư mục [`../simulator/`](../simulator/index.html). Governor trong mô phỏng dùng cùng nguyên lý PI như `FC_PI_Baffle` (thang 0–1: Kp≈0,002 /RPM, Ki≈0,0002 /(s·RPM), đã hiệu chỉnh để khởi động không quá tốc).
+## 7. Mô phỏng tương tác (web) — Thiết bị điều tốc SWT-28
+
+Mô phỏng web của thiết bị điều tốc vi xử lý SWT-28 (2 bản vẽ: thủy lực 21 chi tiết + điện PLC/HMI) ở [`../simulator/`](../simulator/index.html). Governor trong mô phỏng dùng cùng nguyên lý PI như `FC_PI_Baffle` (thang 0–1: Kp≈0,002 /RPM, Ki≈0,0002 /(s·RPM), đã hiệu chỉnh: khởi động không quá tốc, FOR CLOSED không xóc, mất lưới/quá dòng tự TRIP).
